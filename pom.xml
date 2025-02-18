@@ -129,7 +129,7 @@
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>com.javaweb.userservice</mainClass>
+                            <mainClass>com.javaweb.jobIT</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
