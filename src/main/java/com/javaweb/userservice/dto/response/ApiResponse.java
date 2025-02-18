@@ -2,7 +2,6 @@ package com.javaweb.userservice.dto.response;
 
 
 import lombok.*;
-import lombok.experimental.FieldDefaults;
 
 @Data
 @Builder
@@ -10,7 +9,7 @@ import lombok.experimental.FieldDefaults;
 @AllArgsConstructor
 public class ApiResponse<T> {
     @Builder.Default
-    private int code = 1000;
+    private int code = 200;
 
     private String message;
     private T result;

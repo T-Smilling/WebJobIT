@@ -1,14 +1,13 @@
 package com.javaweb.userservice.repository;
 
-import java.util.Optional;
-
-import com.javaweb.userservice.entity.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import com.javaweb.userservice.entity.UserEntity;
 import org.springframework.stereotype.Repository;
 
-@Repository
-public interface UserRepository extends JpaRepository<UserEntity, String> {
-    boolean existsByUsername(String username);
+import java.util.Optional;
 
-    Optional<UserEntity> findByUsername(String username);
+@Repository
+public interface UserRepository extends JpaRepository<UserEntity,String> {
+
+     Optional<UserEntity> findByUsername(String name);
 }

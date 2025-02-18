@@ -10,14 +10,14 @@ import java.util.Set;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Entity
+@Entity(name = "roles")
 public class RoleEntity {
     @Id
     private String name;
 
     private String description;
 
-    @ManyToMany(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST,CascadeType.MERGE})
+    @ManyToMany()
     @JoinTable(name="role_permission",
             joinColumns = @JoinColumn(name="role_name"),
             inverseJoinColumns = @JoinColumn(name="permission_name"))
