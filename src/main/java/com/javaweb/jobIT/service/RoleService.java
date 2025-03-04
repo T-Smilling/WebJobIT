@@ -1,15 +1,22 @@
 package com.javaweb.jobIT.service;
 
-import com.javaweb.jobIT.dto.request.RoleRequest;
-import com.javaweb.jobIT.dto.response.RoleResponse;
+import com.javaweb.jobIT.constant.RoleEnum;
+import com.javaweb.jobIT.dto.request.user.RoleRequest;
+import com.javaweb.jobIT.dto.response.user.RoleResponse;
 import com.javaweb.jobIT.entity.PermissionEntity;
 import com.javaweb.jobIT.entity.RoleEntity;
+import com.javaweb.jobIT.entity.UserEntity;
+import com.javaweb.jobIT.exception.AppException;
+import com.javaweb.jobIT.exception.ErrorCode;
 import com.javaweb.jobIT.repository.PermissionRepository;
 import com.javaweb.jobIT.repository.RoleRepository;
+import com.javaweb.jobIT.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
@@ -22,6 +29,7 @@ import java.util.stream.Collectors;
 public class RoleService {
     private final RoleRepository roleRepository;
     private final PermissionRepository permissionRepository;
+    private final UserRepository userRepository;
     private final ModelMapper modelMapper;
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -45,5 +53,24 @@ public class RoleService {
     @PreAuthorize("hasRole('ADMIN')")
     public void deleteRole(String role) {
         roleRepository.deleteById(role);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    public String updateRoleForUser() {
+        var context = SecurityContextHolder.getContext();
+        Authentication authentication = context.getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        String name = authentication.getName();
+        UserEntity user = userRepository.findByUsername(name).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        RoleEntity employer = roleRepository.findById(String.valueOf(RoleEnum.EMPLOYER)).orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+        if (!user.getRoles().contains(employer)){
+            user.getRoles().add(employer);
+            userRepository.save(user);
+            return "Update successfully";
+        } else {
+            return "Account already exists role";
+        }
     }
 }

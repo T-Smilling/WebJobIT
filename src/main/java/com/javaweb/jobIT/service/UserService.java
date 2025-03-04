@@ -1,16 +1,21 @@
 package com.javaweb.jobIT.service;
 
 import com.javaweb.jobIT.constant.RoleEnum;
-import com.javaweb.jobIT.dto.request.CreateUserRequest;
-import com.javaweb.jobIT.dto.request.UpdateUserRequest;
-import com.javaweb.jobIT.dto.response.UserPagination;
-import com.javaweb.jobIT.dto.response.UserResponse;
+import com.javaweb.jobIT.dto.request.user.ChangePasswordRequest;
+import com.javaweb.jobIT.dto.request.user.CreateUserRequest;
+import com.javaweb.jobIT.dto.request.user.ForgotPasswordRequest;
+import com.javaweb.jobIT.dto.request.user.UpdateUserRequest;
+import com.javaweb.jobIT.dto.response.user.UserPagination;
+import com.javaweb.jobIT.dto.response.user.UserResponse;
 import com.javaweb.jobIT.entity.RoleEntity;
 import com.javaweb.jobIT.entity.UserEntity;
 import com.javaweb.jobIT.exception.AppException;
 import com.javaweb.jobIT.exception.ErrorCode;
+import com.javaweb.jobIT.exception.InvalidFormatException;
+import com.javaweb.jobIT.exception.ResourceNotFoundException;
 import com.javaweb.jobIT.repository.RoleRepository;
 import com.javaweb.jobIT.repository.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
@@ -20,13 +25,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.UUID;
 
 
 @Service
@@ -37,66 +47,62 @@ public class UserService {
     private final ModelMapper modelMapper;
     private final PasswordEncoder passwordEncoder;
     private final RoleRepository roleRepository;
+    private final UploadImageService uploadImageService;
+    private final KafkaTemplate<String, String> kafkaTemplate;
+    private final BaseRedisService baseRedisService;
 
-    public UserResponse createUser(CreateUserRequest createUserRequest){
+    public UserResponse createUser(CreateUserRequest createUserRequest) throws IOException {
         UserEntity userEntity = modelMapper.map(createUserRequest, UserEntity.class);
         userEntity.setPassword(passwordEncoder.encode(createUserRequest.getPassword()));
 
         HashSet<RoleEntity> roles = new HashSet<>();
-        roleRepository.findById(String.valueOf(RoleEnum.USER)).ifPresent(roles::add);
+        roleRepository.findById(String.valueOf(RoleEnum.CANDIDATE)).ifPresent(roles::add);
 
         userEntity.setRoles(roles);
         userEntity.setEmailVerified(false);
         userEntity.setStatus("active");
+        userEntity.setAvatarUrl(uploadImageService.uploadImage(createUserRequest.getAvatarUrl()) );
         try {
-            userRepository.save(userEntity);
+            userEntity = userRepository.save(userEntity);
+            String resetToken = UUID.randomUUID().toString();
+
+            baseRedisService.set("validToken:" + resetToken, userEntity.getEmail(), 1);
+            kafkaTemplate.send("confirm-account-topic",String.format("email=%s,code=%s", userEntity.getEmail(),resetToken));
+
         } catch (DataIntegrityViolationException e) {
             throw new AppException(ErrorCode.USER_EXISTED);
         }
-
-
-
-//        var profileRequest = profileMapper.toProfileCreationRequest(request);
-//        profileRequest.setUserId(user.getId());
-//
-//        var profile = profileClient.createProfile(profileRequest);
-//
-//        NotificationEvent notificationEvent = NotificationEvent.builder()
-//                .channel("EMAIL")
-//                .recipient(request.getEmail())
-//                .subject("Welcome to bookteria")
-//                .body("Hello, " + request.getUsername())
-//                .build();
-//
-//        // Publish message to kafka
-//        kafkaTemplate.send("notification-delivery", notificationEvent);
         UserResponse userResponse = modelMapper.map(userEntity, UserResponse.class);
         userResponse.setId(userEntity.getId());
 
         return userResponse;
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'CANDIDATE', 'EMPLOYER')")
     public UserResponse getMyInfo() {
         log.info("In method get User is using");
         var context = SecurityContextHolder.getContext();
-        String name = context.getAuthentication().getName();
-
+        Authentication authentication = context.getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        String name = authentication.getName();
         UserEntity user = userRepository.findByUsername(name).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         return modelMapper.map(user, UserResponse.class);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    public UserResponse updateUser(String userId, UpdateUserRequest request) {
+    public UserResponse updateUser(String userId, UpdateUserRequest request) throws IOException {
         UserEntity user = userRepository.findById(userId).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
         UserEntity updatedUser = modelMapper.map(request, UserEntity.class);
         updatedUser.setId(user.getId());
         updatedUser.setStatus(user.getStatus());
         updatedUser.setEmail(user.getEmail());
-        updatedUser.setRoles(user.getRoles());
         updatedUser.setUsername(user.getUsername());
         updatedUser.setPassword(passwordEncoder.encode(request.getPassword()));
+        updatedUser.setAvatarUrl(uploadImageService.uploadImage(request.getAvatarUrl()));
 
         List<RoleEntity> roles = roleRepository.findAllById(request.getRoles());
         updatedUser.setRoles(new HashSet<>(roles));
@@ -113,7 +119,7 @@ public class UserService {
         userRepository.save(userEntity);
     }
 
-    @PreAuthorize("hasAuthority('ALL_PERMISSION')")
+    @PreAuthorize("hasAuthority('MANAGE_USERS')")
     public UserPagination getAllUsers(int page, int size) {
         log.info("In method get all Users");
         Pageable pageable = PageRequest.of(page,size, Sort.by("username").ascending());
@@ -128,9 +134,47 @@ public class UserService {
                 .build();
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CANDIDATE', 'EMPLOYER')")
     public UserResponse getUser(String id) {
         return modelMapper.map(
                 userRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED)), UserResponse.class);
+    }
+
+    public String forgotPassword(ForgotPasswordRequest request) {
+        UserEntity userEntity = userRepository.findByEmail(request.getEmail()).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (userEntity.getStatus().equals("inactive")){
+            throw new InvalidFormatException("User is disabled");
+        }
+        String resetToken = UUID.randomUUID().toString();
+
+        baseRedisService.setForMinutes("resetToken:" + resetToken, request.getEmail(), 5);
+
+        kafkaTemplate.send("confirm-forgot-password-topic", String.format("email=%s,code=%s", request.getEmail(),resetToken));
+
+        return "Please check your email!";
+    }
+
+    public String verifiedEmail(String validKey) {
+        String email = (String) baseRedisService.get("validToken:"+ validKey);
+        UserEntity user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        user.setEmailVerified(true);
+        userRepository.save(user);
+        baseRedisService.delete("validToken:"+ validKey);
+        return "Account has been activated";
+    }
+
+    public String changePassword(String secretKey, ChangePasswordRequest request) {
+        String email = (String) baseRedisService.get("resetToken:"+ secretKey);
+        UserEntity userEntity = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        if (userEntity.getStatus().equals("inactive")){
+            throw new ResourceNotFoundException("User is disabled");
+        }
+        if (!request.getPassword().equals(request.getConfirmPassword())){
+            throw new ResourceNotFoundException("Passwords do not match");
+        }
+        userEntity.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(userEntity);
+        baseRedisService.delete("resetToken:"+ secretKey);
+        return "Password changed successfully!";
     }
 }

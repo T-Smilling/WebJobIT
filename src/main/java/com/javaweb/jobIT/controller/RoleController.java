@@ -1,8 +1,8 @@
 package com.javaweb.jobIT.controller;
 
-import com.javaweb.jobIT.dto.request.RoleRequest;
+import com.javaweb.jobIT.dto.request.user.RoleRequest;
 import com.javaweb.jobIT.dto.response.ApiResponse;
-import com.javaweb.jobIT.dto.response.RoleResponse;
+import com.javaweb.jobIT.dto.response.user.RoleResponse;
 import com.javaweb.jobIT.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +21,7 @@ public class RoleController {
     ApiResponse<RoleResponse> createRole(@RequestBody RoleRequest request) {
         return ApiResponse.<RoleResponse>builder()
                 .result(roleService.createRole(request))
+                .message("Role created")
                 .build();
     }
 
@@ -28,6 +29,14 @@ public class RoleController {
     ApiResponse<List<RoleResponse>> getAllRoles() {
         return ApiResponse.<List<RoleResponse>>builder()
                 .result(roleService.getAllRoles())
+                .message("All roles")
+                .build();
+    }
+    @PutMapping("/update")
+    ApiResponse<String> updateRoleForUser() {
+        return ApiResponse.<String>builder()
+                .result(roleService.updateRoleForUser())
+                .message("Successfully")
                 .build();
     }
 

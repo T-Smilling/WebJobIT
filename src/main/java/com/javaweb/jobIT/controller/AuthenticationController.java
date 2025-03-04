@@ -1,10 +1,10 @@
 package com.javaweb.jobIT.controller;
 
-import com.javaweb.jobIT.dto.request.AuthenticationRequest;
-import com.javaweb.jobIT.dto.request.CheckTokenRequest;
+import com.javaweb.jobIT.dto.request.user.AuthenticationRequest;
+import com.javaweb.jobIT.dto.request.user.CheckTokenRequest;
 import com.javaweb.jobIT.dto.response.ApiResponse;
-import com.javaweb.jobIT.dto.response.AuthenticationResponse;
-import com.javaweb.jobIT.dto.response.CheckTokenResponse;
+import com.javaweb.jobIT.dto.response.user.AuthenticationResponse;
+import com.javaweb.jobIT.dto.response.user.CheckTokenResponse;
 import com.javaweb.jobIT.service.AuthenticationService;
 import com.nimbusds.jose.JOSEException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,9 +25,12 @@ public class AuthenticationController {
     private final AuthenticationService authenticationService;
 
     @PostMapping("/login")
-    ApiResponse<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest request) {
+    ApiResponse<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest request) throws ParseException {
         AuthenticationResponse result = authenticationService.authenticate(request);
-        return ApiResponse.<AuthenticationResponse>builder().result(result).build();
+        return ApiResponse.<AuthenticationResponse>builder()
+                .result(result)
+                .message("Login successful")
+                .build();
     }
 
     @PostMapping("/validate-token")

@@ -1,8 +1,8 @@
 package com.javaweb.jobIT.controller;
 
-import com.javaweb.jobIT.dto.request.PermissionRequest;
+import com.javaweb.jobIT.dto.request.user.PermissionRequest;
 import com.javaweb.jobIT.dto.response.ApiResponse;
-import com.javaweb.jobIT.dto.response.PermissionResponse;
+import com.javaweb.jobIT.dto.response.user.PermissionResponse;
 import com.javaweb.jobIT.service.PermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +21,7 @@ public class PermissionController {
     ApiResponse<PermissionResponse> createPermission(@RequestBody PermissionRequest request) {
         return ApiResponse.<PermissionResponse>builder()
                 .result(permissionService.createPermission(request))
+                .message("Permission created")
                 .build();
     }
 
@@ -28,6 +29,7 @@ public class PermissionController {
     ApiResponse<List<PermissionResponse>> getAllPermissions() {
         return ApiResponse.<List<PermissionResponse>>builder()
                 .result(permissionService.getAllPermissions())
+                .message("All permissions")
                 .build();
     }
 

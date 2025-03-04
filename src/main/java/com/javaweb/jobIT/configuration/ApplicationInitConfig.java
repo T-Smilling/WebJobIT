@@ -41,16 +41,22 @@ public class ApplicationInitConfig {
         log.info("Start initializing application... ");
         return args -> {
             if (userRepository.findByUsername(ADMIN_USER_NAME).isEmpty()) {
-                if (roleRepository.findById(String.valueOf(RoleEnum.USER)).isEmpty()) {
+                if (roleRepository.findById(String.valueOf(RoleEnum.CANDIDATE)).isEmpty()) {
                     roleRepository.save(RoleEntity.builder()
-                            .name(String.valueOf(RoleEnum.USER))
-                            .description("Role User")
+                            .name(String.valueOf(RoleEnum.CANDIDATE))
+                            .description("Candidate Role")
                             .build());
                 }
                 if (roleRepository.findById(String.valueOf(RoleEnum.ADMIN)).isEmpty()) {
                     roleRepository.save(RoleEntity.builder()
                             .name(String.valueOf(RoleEnum.ADMIN))
-                            .description("Role Admin")
+                            .description("Admin Role")
+                            .build());
+                }
+                if (roleRepository.findById(String.valueOf(RoleEnum.EMPLOYER)).isEmpty()) {
+                    roleRepository.save(RoleEntity.builder()
+                            .name(String.valueOf(RoleEnum.EMPLOYER))
+                            .description("Employer Role")
                             .build());
                 }
                 RoleEntity roleAdmin = roleRepository.findById(String.valueOf(RoleEnum.ADMIN))
@@ -62,6 +68,8 @@ public class ApplicationInitConfig {
                 UserEntity user = UserEntity.builder()
                         .username(ADMIN_USER_NAME)
                         .password(passwordEncoder.encode(ADMIN_PASSWORD))
+                        .status("active")
+                        .emailVerified(true)
                         .roles(roles)
                         .build();
                 userRepository.save(user);

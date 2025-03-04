@@ -1,8 +1,8 @@
 package com.javaweb.jobIT.configuration;
 
 
-import com.javaweb.jobIT.dto.request.CheckTokenRequest;
-import com.javaweb.jobIT.dto.response.CheckTokenResponse;
+import com.javaweb.jobIT.dto.request.user.CheckTokenRequest;
+import com.javaweb.jobIT.dto.response.user.CheckTokenResponse;
 import com.javaweb.jobIT.service.AuthenticationService;
 import com.nimbusds.jwt.SignedJWT;
 import lombok.RequiredArgsConstructor;

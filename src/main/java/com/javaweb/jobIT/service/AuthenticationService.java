@@ -1,14 +1,12 @@
 package com.javaweb.jobIT.service;
 
-import com.javaweb.jobIT.dto.request.AuthenticationRequest;
-import com.javaweb.jobIT.dto.request.CheckTokenRequest;
-import com.javaweb.jobIT.dto.response.AuthenticationResponse;
-import com.javaweb.jobIT.dto.response.CheckTokenResponse;
-import com.javaweb.jobIT.entity.InvalidatedTokenEntity;
+import com.javaweb.jobIT.dto.request.user.AuthenticationRequest;
+import com.javaweb.jobIT.dto.request.user.CheckTokenRequest;
+import com.javaweb.jobIT.dto.response.user.AuthenticationResponse;
+import com.javaweb.jobIT.dto.response.user.CheckTokenResponse;
 import com.javaweb.jobIT.entity.UserEntity;
 import com.javaweb.jobIT.exception.AppException;
 import com.javaweb.jobIT.exception.ErrorCode;
-import com.javaweb.jobIT.repository.InvalidatedTokenRepository;
 import com.javaweb.jobIT.repository.UserRepository;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
@@ -37,7 +35,7 @@ import java.util.UUID;
 @Slf4j
 public class AuthenticationService {
     private final UserRepository userRepository;
-    private final InvalidatedTokenRepository invalidatedTokenRepository;
+    private final BaseRedisService baseRedisService;
 
     @NonFinal
     @Value("${jwt.signerKey}")
@@ -76,8 +74,11 @@ public class AuthenticationService {
         boolean verified = signedJWT.verify(jwsVerifier);
         if (!verified && expiryTime.after(new Date())) throw new AppException(ErrorCode.UNAUTHENTICATED);
 
-        if (invalidatedTokenRepository.existsById(signedJWT.getJWTClaimsSet().getJWTID()))
+        String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
+        String logoutToken = (String) baseRedisService.get("logoutToken:" + jwtId);
+        if (logoutToken != null && logoutToken.equals(token)) {
             throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
 
         return signedJWT;
     }
@@ -121,7 +122,8 @@ public class AuthenticationService {
         }
     }
 
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+
+    public AuthenticationResponse authenticate(AuthenticationRequest request) throws ParseException {
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
         UserEntity userEntity = userRepository
                 .findByUsername(request.getUsername())
@@ -130,8 +132,12 @@ public class AuthenticationService {
         boolean authenticated = passwordEncoder.matches(request.getPassword(), userEntity.getPassword());
 
         if (!authenticated) throw new AppException(ErrorCode.USERNAME_OR_PASSWORD_INCORRECT);
-
+        if (userEntity.getStatus().equals("inactive") || !userEntity.getEmailVerified()) throw new AppException(ErrorCode.USER_IS_NOT_ACTIVE);
         String token = generateToken(userEntity);
+
+        SignedJWT signedJWT = SignedJWT.parse(token);
+        String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
+        baseRedisService.set("token:" + jwtId, token, 7);
 
         return AuthenticationResponse.builder()
                 .token(token)
@@ -141,21 +147,16 @@ public class AuthenticationService {
     public void logout(HttpServletRequest request) {
         try {
             String header = request.getHeader("Authorization");
-
             if (header != null && header.startsWith("Bearer ")) {
                 String token = header.substring(7);
                 SignedJWT signToken = verifyToken(token, true);
 
                 String jwtId = signToken.getJWTClaimsSet().getJWTID();
-                Date expiryTime = signToken.getJWTClaimsSet().getExpirationTime();
 
-                InvalidatedTokenEntity invalidToken =
-                        InvalidatedTokenEntity.builder()
-                                .id(jwtId)
-                                .expiryTime(expiryTime)
-                                .build();
+                baseRedisService.delete("token:" + jwtId);
 
-                invalidatedTokenRepository.save(invalidToken);
+                baseRedisService.set("logoutToken:" + jwtId, token,1);
+
                 log.info("Token {} đã bị vô hiệu hóa thành công! ", jwtId);
             }
         } catch (ParseException | JOSEException e) {
@@ -166,26 +167,26 @@ public class AuthenticationService {
     }
 
     public AuthenticationResponse refreshToken(HttpServletRequest request) throws ParseException, JOSEException {
-        String tokenRequest = request.getHeader("referer");
-        SignedJWT signedJWT = verifyToken(tokenRequest, true);
+        String header = request.getHeader("Authorization");
+        if (header == null || !header.startsWith("Bearer ")) throw new AppException(ErrorCode.UNAUTHORIZED);
 
-        String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
-        Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+        String token = header.substring(7);
 
-        InvalidatedTokenEntity invalidatedToken =
-                InvalidatedTokenEntity.builder()
-                        .id(jwtId)
-                        .expiryTime(expiryTime)
-                        .build();
-
-        invalidatedTokenRepository.save(invalidatedToken);
+        SignedJWT signedJWT = verifyToken(token, true);
 
         String username = signedJWT.getJWTClaimsSet().getSubject();
 
         UserEntity user = userRepository.findByUsername(username).orElseThrow(() -> new AppException(ErrorCode.UNAUTHENTICATED));
 
-        String token = generateToken(user);
+        String tokenRefresh = generateToken(user);
 
-        return AuthenticationResponse.builder().token(token).build();
+        String jwtId = signedJWT.getJWTClaimsSet().getJWTID();
+        String currentToken = (String) baseRedisService.get("token:" + jwtId);
+
+        if (currentToken != null && currentToken.equals(token)) {
+            baseRedisService.set("token:" + jwtId, tokenRefresh, 7);
+        }
+
+        return AuthenticationResponse.builder().token(tokenRefresh).build();
     }
 }

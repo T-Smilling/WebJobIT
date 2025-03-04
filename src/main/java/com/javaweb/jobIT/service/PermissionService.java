@@ -1,7 +1,7 @@
 package com.javaweb.jobIT.service;
 
-import com.javaweb.jobIT.dto.request.PermissionRequest;
-import com.javaweb.jobIT.dto.response.PermissionResponse;
+import com.javaweb.jobIT.dto.request.user.PermissionRequest;
+import com.javaweb.jobIT.dto.response.user.PermissionResponse;
 import com.javaweb.jobIT.entity.PermissionEntity;
 import com.javaweb.jobIT.repository.PermissionRepository;
 import lombok.RequiredArgsConstructor;
